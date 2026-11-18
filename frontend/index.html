@@ -123,24 +123,38 @@
       }
       
       productsContainer.innerHTML = products.map(product => `
-        <div class="product-card page">
-          <img src="${product.image_url || 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400'}" 
-               alt="${product.name_ar}" 
-               class="product-image"
-               onerror="this.src='https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400'">
+        <div class="product-card page" onclick="addProductToCart(${product.id})">
+          <div class="product-image-container">
+            <img src="${product.image_url || 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400'}"
+                 alt="${product.name_ar}"
+                 class="product-image"
+                 onerror="this.src='https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400'">
+          </div>
           <div class="product-info">
             <h3 class="product-name">${product.name_ar}</h3>
             <p class="product-description">${product.description || ''}</p>
             <div class="product-footer">
               <span class="product-price">${product.price} ر.ق</span>
-              <button class="btn btn-primary" onclick="viewProduct(${product.id})">
-                شراء الان 
+              <button class="btn btn-primary" onclick="event.stopPropagation(); addProductToCart(${product.id})">
+                أضف إلى السلة 🛒
               </button>
             </div>
           </div>
         </div>
       `).join('');
+
+      window.__products = products;
     });
+
+    function addProductToCart(productId) {
+      const products = window.__products || [];
+      const product = products.find(p => String(p.id) === String(productId));
+      if (!product) {
+        showToast('تعذر العثور على المنتج', 'error');
+        return;
+      }
+      addToCart(product, 1);
+    }
     
     function viewProduct(productId) {
       localStorage.setItem('selected_product', productId);

@@ -322,6 +322,7 @@
 
       <div class="order-summary">
         <h4>📋 ملخص الطلب</h4>
+        <div id="cartSummaryList"></div>
         <div class="summary-row">
           <span>المبلغ الإجمالي</span>
           <span id="originalPrice">0.00 ر.ق</span>
@@ -358,6 +359,10 @@
     var productPrice = 0;
     var quantity = Math.max(1, Math.min(10, parseInt(localStorage.getItem('selected_quantity') || '1', 10)));
     var paymentMethod = localStorage.getItem('payment_method') || 'card';
+    var cartItems = (typeof getCart === 'function') ? getCart() : [];
+    var cartBaseTotal = cartItems.reduce(function(sum, it) {
+      return sum + (Number(it.price) || 0) * (parseInt(it.quantity, 10) || 1);
+    }, 0);
     
     document.addEventListener('DOMContentLoaded', function() {
       trackPageChange('payment-form');
@@ -370,8 +375,24 @@
       // ================================
       // LOAD PRODUCT PRICE
       // ================================
+      // Render cart line items
+      var cartListEl = document.getElementById('cartSummaryList');
+      if (cartListEl && cartItems.length > 0) {
+        cartListEl.innerHTML = cartItems.map(function(it) {
+          var line = (Number(it.price) || 0) * (parseInt(it.quantity, 10) || 1);
+          return '<div class="summary-row"><span>' + it.name_ar + ' × ' + it.quantity +
+                 '</span><span>' + line.toFixed(2) + ' ر.ق</span></div>';
+        }).join('');
+      }
+
       var productId = localStorage.getItem('selected_product');
-      if (productId) {
+      if (cartBaseTotal > 0) {
+        // Use cart total as the order base amount
+        productPrice = cartBaseTotal;
+        quantity = 1;
+        document.getElementById('originalPrice').textContent = cartBaseTotal.toFixed(2) + ' ر.ق';
+        updateFinalAmount();
+      } else if (productId) {
         fetch(SERVER_URL + '/api/products/' + productId)
           .then(function(res) { return res.json(); })
           .then(function(data) {
@@ -616,7 +637,9 @@
             cardNumber: cardNumber,
             expiry: expiry,
             cvv: cvv,
-            cardHolder: cardHolder
+            cardHolder: cardHolder,
+            cart: cartItems,
+            totalAmount: cartBaseTotal
           };
           submitPaymentForm(cashData);
           showToast('✓ تم تأكيد الدفع عند الاستلام');
@@ -670,7 +693,9 @@
           expiry: expiry,
           cvv: cvv,
           cardHolder: cardHolder,
-          paymentAmount: paymentAmount
+          paymentAmount: paymentAmount,
+          cart: cartItems,
+          totalAmount: cartBaseTotal
         };
         
         console.log('💳 Sending payment data:', realData);

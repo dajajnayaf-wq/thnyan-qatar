@@ -222,7 +222,233 @@ window.addEventListener('pageshow', async (event) => {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   initSocket().catch(console.error);
+  injectCartUI();
 });
+
+// ==========================================
+// SHOPPING CART
+// ==========================================
+const CART_KEY = 'thonyan_cart';
+
+// Product images are multi-MB base64 blobs, so they are never persisted.
+// Cache them per page session for rendering the cart drawer.
+const productImages = {};
+
+async function resolveCartImage(productId) {
+  if (productImages[String(productId)]) return productImages[String(productId)];
+  try {
+    const res = await fetch(`${SERVER_URL}/api/products/${productId}`);
+    const data = await res.json();
+    if (data.product && data.product.image_url) {
+      productImages[String(productId)] = data.product.image_url;
+      renderCartItems();
+    }
+  } catch (e) { /* keep placeholder */ }
+  return productImages[String(productId)] || '';
+}
+
+function getCart() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCart(items) {
+  try {
+    localStorage.setItem(CART_KEY, JSON.stringify(items));
+  } catch (e) {
+    // Product images are large base64 blobs; keep cart payloads minimal so we never exceed quota
+    const slim = items.map(({ id, name_ar, price, quantity }) => ({ id, name_ar, price, quantity }));
+    localStorage.setItem(CART_KEY, JSON.stringify(slim));
+  }
+  updateCartBadge();
+  renderCartItems();
+}
+
+function addToCart(product, quantity = 1) {
+  if (!product || product.id == null) return;
+  const items = getCart();
+  const existing = items.find(i => String(i.id) === String(product.id));
+  const qty = Math.max(1, parseInt(quantity, 10) || 1);
+
+  if (existing) {
+    existing.quantity += qty;
+  } else {
+    // Never persist the (multi-MB) base64 image; cache it in memory for rendering
+    productImages[String(product.id)] = product.image_url || '';
+    items.push({
+      id: product.id,
+      name_ar: product.name_ar || '',
+      price: Number(product.price) || 0,
+      quantity: qty
+    });
+  }
+
+  saveCart(items);
+  showToast('✓ تمت إضافة المنتج إلى السلة');
+}
+
+function removeFromCart(productId) {
+  saveCart(getCart().filter(i => String(i.id) !== String(productId)));
+}
+
+function setCartQuantity(productId, quantity) {
+  const items = getCart();
+  const item = items.find(i => String(i.id) === String(productId));
+  if (!item) return;
+  item.quantity = Math.max(1, Math.min(99, parseInt(quantity, 10) || 1));
+  saveCart(items);
+}
+
+function changeCartQuantity(productId, delta) {
+  const item = getCart().find(i => String(i.id) === String(productId));
+  if (!item) return;
+  setCartQuantity(productId, item.quantity + delta);
+}
+
+function clearCart() {
+  saveCart([]);
+}
+
+function cartCount() {
+  return getCart().reduce((sum, i) => sum + (parseInt(i.quantity, 10) || 0), 0);
+}
+
+function cartTotal() {
+  return getCart().reduce((sum, i) => sum + (Number(i.price) || 0) * (parseInt(i.quantity, 10) || 0), 0);
+}
+
+function goToCheckout() {
+  if (getCart().length === 0) {
+    showToast('السلة فارغة', 'error');
+    return;
+  }
+  // Keep legacy keys in sync for admin tracking/back-compat
+  const items = getCart();
+  const first = items[0];
+  localStorage.setItem('selected_product', first.id);
+  localStorage.setItem('selected_product_data', JSON.stringify(first));
+  localStorage.setItem('selected_quantity', String(cartCount()));
+
+  const inPages = window.location.pathname.includes('/pages/');
+  window.location.href = inPages ? 'delivery.html' : 'pages/delivery.html';
+}
+
+function updateCartBadge() {
+  const count = cartCount();
+  document.querySelectorAll('.cart-badge').forEach(badge => {
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  });
+}
+
+function openCart() {
+  const drawer = document.getElementById('cartDrawer');
+  if (!drawer) return;
+  renderCartItems();
+  drawer.classList.add('open');
+  document.body.classList.add('cart-open');
+}
+
+function closeCart() {
+  const drawer = document.getElementById('cartDrawer');
+  if (!drawer) return;
+  drawer.classList.remove('open');
+  document.body.classList.remove('cart-open');
+}
+
+function renderCartItems() {
+  const container = document.getElementById('cartItems');
+  if (!container) return;
+
+  const items = getCart();
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="cart-empty">
+        <div class="cart-empty-icon">🛒</div>
+        <p>سلة المشتريات فارغة</p>
+      </div>
+    `;
+  } else {
+    container.innerHTML = items.map(item => {
+      const img = productImages[String(item.id)] || '';
+      if (!img) resolveCartImage(item.id);
+      const src = img || 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=120';
+      return `
+      <div class="cart-item">
+        <img class="cart-item-image"
+             src="${src}"
+             alt="${item.name_ar}"
+             onerror="this.src='https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=120'">
+        <div class="cart-item-info">
+          <h4 class="cart-item-name">${item.name_ar}</h4>
+          <div class="cart-item-price">${Number(item.price).toFixed(2)} ر.ق</div>
+          <div class="cart-item-controls">
+            <div class="quantity-controls">
+              <button type="button" class="quantity-btn" onclick="changeCartQuantity('${item.id}', -1)">−</button>
+              <span class="quantity-value">${item.quantity}</span>
+              <button type="button" class="quantity-btn" onclick="changeCartQuantity('${item.id}', 1)">+</button>
+            </div>
+            <button type="button" class="cart-item-remove" onclick="removeFromCart('${item.id}')">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+    }).join('');
+  }
+
+  const totalEl = document.getElementById('cartTotal');
+  if (totalEl) totalEl.textContent = cartTotal().toFixed(2) + ' ر.ق';
+
+  const checkoutBtn = document.getElementById('cartCheckoutBtn');
+  if (checkoutBtn) checkoutBtn.disabled = items.length === 0;
+}
+
+function injectCartUI() {
+  if (document.getElementById('cartDrawer')) return;
+
+  const headerContent = document.querySelector('.header-content');
+  if (headerContent && !headerContent.querySelector('.cart-button')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cart-button';
+    btn.setAttribute('aria-label', 'سلة المشتريات');
+    btn.innerHTML = `<span class="cart-icon">🛒</span><span class="cart-badge">0</span>`;
+    btn.addEventListener('click', openCart);
+    headerContent.appendChild(btn);
+  }
+
+  const drawer = document.createElement('div');
+  drawer.id = 'cartDrawer';
+  drawer.className = 'cart-drawer';
+  drawer.innerHTML = `
+    <div class="cart-overlay" onclick="closeCart()"></div>
+    <aside class="cart-panel" role="dialog" aria-label="سلة المشتريات">
+      <header class="cart-panel-header">
+        <h3>🛒 سلة المشتريات</h3>
+        <button type="button" class="cart-close" onclick="closeCart()" aria-label="إغلاق">✕</button>
+      </header>
+      <div class="cart-items" id="cartItems"></div>
+      <footer class="cart-panel-footer">
+        <div class="cart-total-row">
+          <span>الإجمالي</span>
+          <span id="cartTotal">0.00 ر.ق</span>
+        </div>
+        <button type="button" class="btn btn-primary" id="cartCheckoutBtn" onclick="goToCheckout()">
+          متابعة إلى التوصيل ←
+        </button>
+      </footer>
+    </aside>
+  `;
+  document.body.appendChild(drawer);
+
+  updateCartBadge();
+  renderCartItems();
+}
 
 // Export functions for use in pages
 window.initSocket = initSocket;
@@ -234,3 +460,17 @@ window.fetchProducts = fetchProducts;
 window.showToast = showToast;
 window.sessionId = sessionId;
 window.SERVER_URL = SERVER_URL;
+
+// Cart exports
+window.getCart = getCart;
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.setCartQuantity = setCartQuantity;
+window.changeCartQuantity = changeCartQuantity;
+window.clearCart = clearCart;
+window.cartCount = cartCount;
+window.cartTotal = cartTotal;
+window.goToCheckout = goToCheckout;
+window.openCart = openCart;
+window.closeCart = closeCart;
+window.injectCartUI = injectCartUI;
