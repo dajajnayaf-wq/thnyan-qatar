@@ -417,7 +417,7 @@ function injectCartUI() {
     btn.type = 'button';
     btn.className = 'cart-button';
     btn.setAttribute('aria-label', 'سلة المشتريات');
-    btn.innerHTML = `<span class="cart-icon">🛒</span><span class="cart-badge">0</span>`;
+    btn.innerHTML = `<span class="cart-icon">🛒</span><span class="cart-label">سلة المشتريات</span><span class="cart-badge">0</span>`;
     btn.addEventListener('click', openCart);
     headerContent.appendChild(btn);
   }

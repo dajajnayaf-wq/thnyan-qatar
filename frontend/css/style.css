@@ -56,7 +56,9 @@ html,
 body {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  /* `clip` (not `hidden`) keeps horizontal overflow contained without turning
+     body into a scroll container, which would break the sticky header. */
+  overflow-x: clip;
   position: relative;
 }
 
@@ -74,8 +76,6 @@ body {
   min-height: 100vh;
   direction: rtl;
   line-height: 1.6;
-  overflow-x: hidden;
-  overflow-y: auto;
   touch-action: pan-y;
   overscroll-behavior-x: none;
 }
@@ -913,8 +913,29 @@ textarea.form-control {
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   .header-content {
-    flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 19px;
+    border-radius: 12px;
+  }
+
+  .logo-text h1 {
+    font-size: 16px;
+  }
+
+  .cart-button {
+    height: 40px;
+    padding: 0 13px;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .cart-icon {
+    font-size: 17px;
   }
   
   .hero h2 {
@@ -1044,16 +1065,20 @@ select.form-control {
 /* ===== CART ===== */
 .cart-button {
   position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
+  color: var(--text-primary);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
   transition: var(--transition);
   box-shadow: var(--shadow-sm);
 }
@@ -1065,13 +1090,14 @@ select.form-control {
 }
 
 .cart-icon {
+  font-size: 20px;
   line-height: 1;
 }
 
 .cart-badge {
   position: absolute;
-  top: -4px;
-  left: -4px;
+  top: -6px;
+  right: -6px;
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
